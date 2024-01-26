@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+
+    parameters {
+        booleanParam(name: 'autoApprove', defaultValue: false, description: 'Automatically run apply after generating plan?')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs: [[url: '']]])
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                script {
+                    sh 'cd terraform && terraform init'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                script {
+                    sh 'cd terraform && terraform plan -out=tfplan'
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            when {
+                expression { params.autoApprove == true }
+            }
+            steps {
+                script {
+                    sh 'cd terraform && terraform apply -auto-approve tfplan'
+                }
+            }
+        }
+
+        stage('Terraform Approval') {
+            when {
+                expression { params.autoApprove == false }
+            }
+            steps {
+                script {
+                    def plan = readFile 'terraform/tfplan.txt'
+                    input message: 'Do you want to apply the plan?',
+                          parameters: [text(name: 'Plan', description: 'Please review the plan', defaultValue: plan)]
+                }
+            }
+        }
+    }
+}
